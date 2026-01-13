@@ -5,7 +5,7 @@ require('dotenv').config();
 
 const app = express();
 app.use(cors({
-    origin: 'https://warnermedia.netlify.app'
+    origin: 'https://warnermidia.netlify.app'
 }));app.use(express.json());
 
 const pool = new Pool({
