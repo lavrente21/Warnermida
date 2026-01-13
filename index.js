@@ -5,31 +5,31 @@ require('dotenv').config();
 
 const app = express();
 
-// Configuração do CORS - Aceita o seu site oficial
-app.use(cors({
-    origin: 'https://warnermidia.netlify.app',
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type']
-}));
-
+// 1. CONFIGURAÇÃO DO CORS (PRONTA PARA FUNCIONAR)
+app.use(cors()); // Permite qualquer origem para evitar bloqueios no Netlify
 app.use(express.json());
 
-// Conexão com o Banco de Dados
+// 2. CONEXÃO COM O BANCO DE DADOS
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Teste de conexão (aparece nos logs do Render)
+// Teste de conexão nos Logs do Render
 pool.connect((err, client, release) => {
   if (err) {
-    return console.error('❌ Erro de conexão ao DB:', err.stack);
+    return console.error('❌ Erro ao conectar no Banco:', err.stack);
   }
-  console.log('✅ Conectado ao PostgreSQL com sucesso!');
+  console.log('✅ Conexão com PostgreSQL estabelecida!');
   release();
 });
 
-// Rota de Registro
+// 3. ROTA DE STATUS (Para testar se o servidor está vivo)
+app.get('/api/status', (req, res) => {
+    res.json({ mensagem: "Servidor online e operante!" });
+});
+
+// 4. ROTA DE REGISTRO
 app.post('/api/registrar', async (req, res) => {
   const { nome, email, senha } = req.body;
   try {
@@ -37,14 +37,14 @@ app.post('/api/registrar', async (req, res) => {
       'INSERT INTO usuarios (nome, email, senha, saldo) VALUES ($1, $2, $3, 0) RETURNING id',
       [nome, email, senha]
     );
-    res.status(201).json({ message: "Sucesso", id: result.rows[0].id });
+    res.status(201).json({ message: "Usuário criado!", id: result.rows[0].id });
   } catch (err) {
     console.error(err);
-    res.status(400).json({ error: "Email já existe" });
+    res.status(400).json({ error: "Este email já está cadastrado." });
   }
 });
 
-// Rota de Login
+// 5. ROTA DE LOGIN
 app.post('/api/login', async (req, res) => {
   const { email, senha } = req.body;
   try {
@@ -52,18 +52,14 @@ app.post('/api/login', async (req, res) => {
     if (result.rows.length > 0) {
       res.json(result.rows[0]);
     } else {
-      res.status(401).json({ error: "Credenciais inválidas" });
+      res.status(401).json({ error: "Email ou senha incorretos." });
     }
   } catch (err) {
-    res.status(500).json({ error: "Erro no servidor" });
+    res.status(500).json({ error: "Erro interno no servidor." });
   }
 });
 
-// Rota de Status (para você testar se a API está viva pelo navegador)
-app.get('/api/status', (req, res) => {
-  res.json({ status: "Operacional" });
-});
-
+// 6. INICIAR SERVIDOR
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
