@@ -63,4 +63,47 @@ app.post('/api/login', async (req, res) => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
+});// ROTA DE DEPÓSITO (Usuário envia)
+app.post('/api/deposito', async (req, res) => {
+  const { usuario_id, valor, comprovativo } = req.body;
+  try {
+    await pool.query(
+      'INSERT INTO depositos (usuario_id, valor, comprovativo) VALUES ($1, $2, $3)',
+      [usuario_id, valor, comprovativo]
+    );
+    res.json({ message: "Depósito enviado para análise!" });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao processar depósito" });
+  }
 });
+
+// ROTA ADMIN: LISTAR DEPÓSITOS PENDENTES
+app.get('/api/admin/depositos', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT d.*, u.nome, u.email 
+      FROM depositos d 
+      JOIN usuarios u ON d.usuario_id = u.id 
+      WHERE d.status = 'pendente'
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao buscar depósitos" });
+  }
+});
+
+// ROTA ADMIN: APROVAR DEPÓSITO
+app.post('/api/admin/aprovar', async (req, res) => {
+  const { deposito_id, usuario_id, valor } = req.body;
+  try {
+    // 1. Marca como aprovado
+    await pool.query('UPDATE depositos SET status = $1 WHERE id = $2', ['aprovado', deposito_id]);
+    // 2. Soma o saldo ao usuário
+    await pool.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [valor, usuario_id]);
+    
+    res.json({ message: "Depósito aprovado e saldo atualizado!" });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao aprovar" });
+  }
+});
+
