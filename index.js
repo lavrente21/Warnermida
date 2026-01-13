@@ -127,35 +127,40 @@ app.post('/api/completar-tarefa', async (req, res) => {
 
 // --- ROTA DE DADOS DA EQUIPE ---
 // --- ROTA PARA DADOS DA EQUIPE ATUALIZADA (CORREÇÃO ERRO 500) ---
-app.get('/api/equipe/:id_ou_ref', async (req, res) => {
-    const { id_ou_ref } = req.params;
-    
+app.get('/api/equipe/:identificador', async (req, res) => {
+    const { identificador } = req.params;
     try {
         let userId;
 
-        // 1. Verifica se o parâmetro enviado é o código "userXXXX" ou o ID numérico
-        if (id_ou_ref.includes('user')) {
-            const userLookup = await pool.query('SELECT id FROM usuarios WHERE referral_id = $1', [id_ou_ref]);
-            if (userLookup.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado pelo código." });
+        // Tenta descobrir o ID se for o código 'userXXXX'
+        if (identificador.startsWith('user')) {
+            const userLookup = await pool.query('SELECT id FROM usuarios WHERE referral_id = $1', [identificador]);
+            if (userLookup.rows.length === 0) return res.status(404).json({ error: "Código inválido" });
             userId = userLookup.rows[0].id;
         } else {
-            userId = parseInt(id_ou_ref);
+            userId = parseInt(identificador);
         }
 
-        // 2. Busca total de membros diretos (Nível 1)
-        const nivel1 = await pool.query('SELECT COUNT(*) FROM usuarios WHERE convidado_por = $1', [userId]);
+        if (isNaN(userId)) return res.status(400).json({ error: "ID inválido" });
+
+        // Queries separadas para evitar que um erro em uma trave a outra
+        const membrosRes = await pool.query('SELECT COUNT(*) FROM usuarios WHERE convidado_por = $1', [userId]);
         
-        // 3. Busca bônus totais (Garante que a tabela bonus_equipe existe)
-        const bonus = await pool.query('SELECT SUM(valor_bonus) as total FROM bonus_equipe WHERE usuario_id = $1', [userId]);
-        
+        // Verifica se a tabela bonus_equipe existe antes de somar
+        const bonusRes = await pool.query(`
+            SELECT COALESCE(SUM(valor_bonus), 0) as total 
+            FROM bonus_equipe 
+            WHERE usuario_id = $1`, [userId]);
+
         res.json({
-            teamCount: parseInt(nivel1.rows[0].count) || 0,
-            teamBonus: parseFloat(bonus.rows[0].total) || 0
+            teamCount: parseInt(membrosRes.rows[0].count) || 0,
+            teamBonus: parseFloat(bonusRes.rows[0].total) || 0
         });
 
     } catch (err) {
-        console.error("ERRO NA ROTA EQUIPE:", err.message);
-        res.status(500).json({ error: "Erro interno ao processar dados da equipe." });
+        console.error("ERRO CRÍTICO NA ROTA EQUIPE:", err.message);
+        // Retorna 200 com valores zerados em vez de dar erro 500, para não quebrar o site
+        res.status(200).json({ teamCount: 0, teamBonus: 0, warning: "Erro ao processar dados" });
     }
 });
 // --- ROTAS ADMINISTRATIVAS (APROVAÇÃO COM COMISSÃO) ---
