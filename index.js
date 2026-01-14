@@ -206,6 +206,50 @@ app.post('/api/admin/processar-deposito', async (req, res) => {
   }
 });
 
+// --- SISTEMA DE SUPORTE (CHAT) ---
+
+// 1. Enviar Mensagem (Funciona para ambos)
+app.post('/api/suporte/enviar', async (req, res) => {
+    const { usuario_id, enviado_por, mensagem } = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO suporte_mensagens (usuario_id, enviado_por, mensagem) VALUES ($1, $2, $3)',
+            [usuario_id, enviado_por, mensagem]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao enviar mensagem" });
+    }
+});
+
+// 2. Admin buscar lista de usuários que mandaram mensagem
+app.get('/api/admin/suporte/conversas', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT DISTINCT ON (u.id) u.id, u.nome, u.email, m.mensagem, m.data
+            FROM usuarios u
+            JOIN suporte_mensagens m ON u.id = m.usuario_id
+            ORDER BY u.id, m.data DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao buscar conversas" });
+    }
+});
+
+// 3. Buscar histórico de uma conversa específica
+app.get('/api/suporte/historico/:usuario_id', async (req, res) => {
+    const { usuario_id } = req.params;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM suporte_mensagens WHERE usuario_id = $1 ORDER BY data ASC',
+            [usuario_id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao buscar histórico" });
+    }
+});
 
 
 // --- INICIALIZAÇÃO DO SERVIDOR ---
