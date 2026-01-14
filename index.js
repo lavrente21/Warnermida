@@ -206,6 +206,8 @@ app.post('/api/admin/processar-deposito', async (req, res) => {
   }
 });
 
+
+
 // --- INICIALIZAÇÃO DO SERVIDOR ---
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
