@@ -227,3 +227,45 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Warner Media Server rodando na porta ${PORT}`);
 });
+
+// ROTA PARA PROCESSAR DEPÓSITO NO SEU SERVER.JS
+app.post('/api/admin/processar-deposito', async (req, res) => {
+    const { deposito_id, status } = req.body; // status: 'aprovado' ou 'rejeitado'
+    
+    // 1. Busca o depósito
+    const deposito = await db.collection('depositos').findOne({ id: deposito_id });
+    if (!deposito || deposito.status !== 'pendente') return res.status(400).send("Depósito inválido");
+
+    if (status === 'aprovado') {
+        const valor = parseFloat(deposito.valor);
+        const user = await db.collection('usuarios').findOne({ id: deposito.usuario_id });
+
+        // 2. Adiciona saldo ao usuário
+        await db.collection('usuarios').updateOne(
+            { id: user.id },
+            { $inc: { saldo: valor } }
+        );
+
+        // 3. PAGAMENTO DA EQUIPE (Multinível)
+        // Nível 1 (Pai) - 10%
+        if (user.padrinho_id) {
+            await db.collection('usuarios').updateOne(
+                { referral_id: user.padrinho_id },
+                { $inc: { saldo: valor * 0.10, teamBonus: valor * 0.10 } }
+            );
+            
+            // Nível 2 (Avô) - 3%
+            const pai = await db.collection('usuarios').findOne({ referral_id: user.padrinho_id });
+            if (pai && pai.padrinho_id) {
+                await db.collection('usuarios').updateOne(
+                    { referral_id: pai.padrinho_id },
+                    { $inc: { saldo: valor * 0.03, teamBonus: valor * 0.03 } }
+                );
+            }
+        }
+    }
+
+    // 4. Atualiza status do depósito para não processar duas vezes
+    await db.collection('depositos').updateOne({ id: deposito_id }, { $set: { status: status } });
+    res.send({ success: true });
+});
