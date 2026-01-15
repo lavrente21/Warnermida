@@ -366,6 +366,34 @@ app.get('/api/suporte/historico/:usuario_id', async (req, res) => {
     }
 });
 
+// Rota para o Admin salvar/editar VIP completo
+app.post('/api/admin/config-vip', async (req, res) => {
+    const { nivel, nome, preco, qtd_tarefas, ganho_por_tarefa, ganho_total_mensal } = req.body;
+    try {
+        await pool.query(
+            `INSERT INTO planos_vip (nivel, nome, preco, qtd_tarefas, ganho_por_tarefa, ganho_total_mensal) 
+             VALUES ($1, $2, $3, $4, $5, $6) 
+             ON CONFLICT (nivel) DO UPDATE SET 
+                nome = $2, preco = $3, qtd_tarefas = $4, ganho_por_tarefa = $5, ganho_total_mensal = $6`,
+            [nivel, nome, preco, qtd_tarefas, ganho_por_tarefa, ganho_total_mensal]
+        );
+        res.json({ success: true, message: "Plano VIP atualizado com sucesso!" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Erro ao configurar VIP" });
+    }
+});
+
+// Rota para listar no Front-end (App)
+app.get('/api/vips', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM planos_vip ORDER BY nivel ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao buscar VIPs" });
+    }
+});
+
 
 // --- INICIALIZAÇÃO DO SERVIDOR ---
 const PORT = process.env.PORT || 10000;
