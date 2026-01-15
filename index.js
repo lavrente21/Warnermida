@@ -78,7 +78,8 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/usuario/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('SELECT id, nome, email, saldo, referral_id, convidado_por FROM usuarios WHERE id = $1', [id]);
+    // ADICIONEI 'nivel_vip' ABAIXO:
+    const result = await pool.query('SELECT id, nome, email, saldo, referral_id, convidado_por, nivel_vip FROM usuarios WHERE id = $1', [id]);
     if (result.rows.length > 0) res.json(result.rows[0]);
     else res.status(404).json({ error: "Usuário não encontrado" });
   } catch (err) {
