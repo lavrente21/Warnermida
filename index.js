@@ -132,6 +132,22 @@ app.post('/api/retirar', async (req, res) => {
     }
 });
 
+app.post('/api/admin/config-vip', async (req, res) => {
+    const { nivel, nome, preco, qtd_tarefas, ganho_por_tarefa, ganho_total_mensal } = req.body;
+    try {
+        await pool.query(
+            `INSERT INTO planos_vip (nivel, nome, preco, qtd_tarefas, ganho_por_tarefa, ganho_total_mensal) 
+             VALUES ($1, $2, $3, $4, $5, $6) 
+             ON CONFLICT (nivel) DO UPDATE SET 
+             nome=$2, preco=$3, qtd_tarefas=$4, ganho_por_tarefa=$5, ganho_total_mensal=$6`,
+            [nivel, nome, preco, qtd_tarefas, ganho_por_tarefa, ganho_total_mensal]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 2. ROTA QUE ESTAVA DANDO 404 (Lado do Admin)
 app.get('/api/admin/saques-pendentes', async (req, res) => {
     try {
