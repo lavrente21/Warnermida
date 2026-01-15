@@ -97,6 +97,73 @@ app.post('/api/deposito', async (req, res) => {
   }
 });
 
+// --- COLOQUE ESTAS ROTAS LOGO ABAIXO DAS ROTAS DE DEPÓSITO NO SEU SERVER.JS ---
+
+// 1. ROTA DE SOLICITAÇÃO DE SAQUE (Lado do Cliente)
+app.post('/api/retirar', async (req, res) => {
+    const { usuario_id, valor, iban, nome_titular, senha } = req.body;
+    try {
+        // Verifica saldo e senha
+        const userRes = await pool.query('SELECT saldo, senha FROM usuarios WHERE id = $1', [usuario_id]);
+        const user = userRes.rows[0];
+
+        if (!user || user.senha !== senha) return res.status(401).json({ error: "Senha incorreta" });
+        if (parseFloat(user.saldo) < parseFloat(valor)) return res.status(400).json({ error: "Saldo insuficiente" });
+
+        await pool.query('BEGIN');
+        // Deduz saldo
+        await pool.query('UPDATE usuarios SET saldo = saldo - $1 WHERE id = $2', [valor, usuario_id]);
+        // Registra saque
+        await pool.query(
+            'INSERT INTO saques (usuario_id, valor, iban, nome_titular, status) VALUES ($1, $2, $3, $4, $5)',
+            [usuario_id, valor, iban, nome_titular, 'pendente']
+        );
+        await pool.query('COMMIT');
+        res.json({ success: true });
+    } catch (err) {
+        await pool.query('ROLLBACK');
+        res.status(500).json({ error: "Erro ao processar saque" });
+    }
+});
+
+// 2. ROTA QUE ESTAVA DANDO 404 (Lado do Admin)
+app.get('/api/admin/saques-pendentes', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT s.*, u.nome, u.email 
+            FROM saques s 
+            JOIN usuarios u ON s.usuario_id = u.id 
+            WHERE s.status = 'pendente' 
+            ORDER BY s.data DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao buscar saques" });
+    }
+});
+
+// 3. ROTA PARA PROCESSAR SAQUE (Pagar ou Recusar)
+app.post('/api/admin/processar-saque', async (req, res) => {
+    const { saque_id, status } = req.body;
+    try {
+        if (status === 'rejeitado') {
+            // Se rejeitar, devolve o dinheiro ao saldo do usuário
+            const saqueRes = await pool.query('SELECT usuario_id, valor FROM saques WHERE id = $1', [saque_id]);
+            const saque = saqueRes.rows[0];
+            await pool.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [saque.valor, saque.usuario_id]);
+        }
+        await pool.query('UPDATE saques SET status = $1 WHERE id = $2', [status, saque_id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao atualizar saque" });
+    }
+});
+
+// --- ATUALIZAÇÃO DO SUPORTE (Para ler imagens corretamente) ---
+
+// No seu app.get('/api/suporte/historico/:usuario_id'), o código já está bom. 
+// O segredo está no FRONT-END (HTML) que enviará a tag <img> dentro do texto.
+
 // --- ROTA DE TAREFAS ---
 
 app.post('/api/completar-tarefa', async (req, res) => {
