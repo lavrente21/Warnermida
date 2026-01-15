@@ -34,29 +34,34 @@ app.get('/api/status', (req, res) => {
 
 // --- ROTAS DE USUÁRIO (REGISTRO E LOGIN) ---
 
-app.post('/api/registrar', async (req, res) => {
-  const { nome, email, senha, ref } = req.body;
-  try {
-    let convidadoPorIdInterno = null;
-    const novoReferralId = gerarReferralId();
+// --- ALTERE DE: app.post('/api/retirar' ---
+// --- PARA: ---
+app.post('/api/levantamento', async (req, res) => {
+    const { usuario_id, valor, iban, nome_titular, senha } = req.body;
+    try {
+        // Verifica saldo e senha
+        const userRes = await pool.query('SELECT saldo, senha FROM usuarios WHERE id = $1', [usuario_id]);
+        const user = userRes.rows[0];
 
-    if (ref) {
-        const resRef = await pool.query('SELECT id FROM usuarios WHERE referral_id = $1', [ref]);
-        if (resRef.rows.length > 0) convidadoPorIdInterno = resRef.rows[0].id;
+        if (!user || user.senha !== senha) return res.status(401).json({ error: "Senha incorreta" });
+        if (parseFloat(user.saldo) < parseFloat(valor)) return res.status(400).json({ error: "Saldo insuficiente" });
+
+        await pool.query('BEGIN');
+        // Deduz saldo
+        await pool.query('UPDATE usuarios SET saldo = saldo - $1 WHERE id = $2', [valor, usuario_id]);
+        
+        // Registra saque (Certifique-se que a tabela se chama 'saques' ou 'levantamentos')
+        await pool.query(
+            'INSERT INTO saques (usuario_id, valor, iban, nome_titular, status) VALUES ($1, $2, $3, $4, $5)',
+            [usuario_id, valor, iban, nome_titular, 'pendente']
+        );
+        await pool.query('COMMIT');
+        res.json({ success: true, message: "Levantamento solicitado!" });
+    } catch (err) {
+        if (pool) await pool.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ error: "Erro ao processar saque" });
     }
-
-    const result = await pool.query(
-      'INSERT INTO usuarios (nome, email, senha, saldo, referral_id, convidado_por) VALUES ($1, $2, $3, 0, $4, $5) RETURNING id, referral_id',
-      [nome, email, senha, novoReferralId, convidadoPorIdInterno]
-    );
-    res.status(201).json({ 
-        message: "Usuário criado!", 
-        id: result.rows[0].id, 
-        referral_id: result.rows[0].referral_id 
-    });
-  } catch (err) {
-    res.status(400).json({ error: "Erro ao registrar. Email já existe." });
-  }
 });
 
 app.post('/api/login', async (req, res) => {
