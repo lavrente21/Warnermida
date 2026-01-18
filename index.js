@@ -134,33 +134,7 @@ app.post('/api/retirar', async (req, res) => {
 
 // Rota para receber o aviso do CPAGrip
 app.get('/api/postback-cpagrip', async (req, res) => {
-    try {
-        const userId = req.query.user_id;
-        // Removemos a trava do status para facilitar o teste inicial
-        
-        if (!userId || userId === "{tracking_id}") {
-            return res.status(400).send("ID inválido ou teste do painel CPAGrip.");
-        }
 
-        // Definir valor com base no VIP (Opcional) ou fixo
-        const valorRecompensa = 250; 
-
-        const usuarioAtualizado = await Usuario.findByIdAndUpdate(
-            userId, 
-            { $inc: { saldo: valorRecompensa } },
-            { new: true }
-        );
-
-        if (usuarioAtualizado) {
-            console.log(`✅ Sucesso: ${valorRecompensa} Kz para o ID ${userId}`);
-            return res.status(200).send("OK"); // Resposta que o CPAGrip exige
-        } else {
-            return res.status(404).send("Usuário não existe no banco.");
-        }
-    } catch (error) {
-        res.status(500).send("Erro interno.");
-    }
-});
 
 app.post('/api/admin/config-vip', async (req, res) => {
     const { nivel, nome, preco, qtd_tarefas, ganho_por_tarefa, ganho_total_mensal } = req.body;
@@ -175,6 +149,39 @@ app.post('/api/admin/config-vip', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+  // Rota para receber o aviso do CPAGrip (Versão PostgreSQL)
+app.get('/api/postback-cpagrip', async (req, res) => {
+    try {
+        const userId = req.query.user_id;
+        
+        // Validação básica para evitar erros de ID vazio
+        if (!userId || userId === "{tracking_id}") {
+            return res.status(400).send("ID inválido ou teste do painel CPAGrip.");
+        }
+
+        // Definir valor da recompensa (Pode ser fixo ou dinâmico)
+        const valorRecompensa = 250; 
+
+        // No PostgreSQL usamos UPDATE com a pool.query
+        const result = await pool.query(
+            'UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2 RETURNING *',
+            [valorRecompensa, userId]
+        );
+
+        if (result.rows.length > 0) {
+            const usuario = result.rows[0];
+            console.log(`✅ Sucesso CPAGrip: ${valorRecompensa} Kz adicionados ao usuário ${usuario.nome} (ID: ${userId})`);
+            return res.status(200).send("OK"); // CPAGrip exige "OK" para parar de enviar o aviso
+        } else {
+            console.log(`⚠️ Postback recebido, mas usuário ${userId} não existe.`);
+            return res.status(404).send("Usuário não encontrado.");
+        }
+    } catch (error) {
+        console.error("❌ Erro no Postback:", error);
+        res.status(500).send("Erro interno.");
     }
 });
 
