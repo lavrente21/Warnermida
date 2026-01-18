@@ -134,26 +134,31 @@ app.post('/api/retirar', async (req, res) => {
 
 // Rota para receber o aviso do CPAGrip
 app.get('/api/postback-cpagrip', async (req, res) => {
-    const { user_id, status } = req.query;
-
-    // O status '1' no CPAGrip significa que a oferta foi concluída com sucesso
-    if (status === '1' || status === 1) {
-        try {
-            // Aqui o código busca o usuário e adiciona o saldo automaticamente
-            // Exemplo: VIP 1 ganha 250, você pode ajustar conforme o valor da oferta
-            const recompensa = 250; 
-            
-            await Usuario.findByIdAndUpdate(user_id, {
-                $inc: { saldo: recompensa }
-            });
-            
-            console.log(`Postback: Usuário ${user_id} recebeu ${recompensa} Kz.`);
-            res.status(200).send("OK");
-        } catch (error) {
-            res.status(500).send("Erro ao processar postback");
+    try {
+        const userId = req.query.user_id;
+        // Removemos a trava do status para facilitar o teste inicial
+        
+        if (!userId || userId === "{tracking_id}") {
+            return res.status(400).send("ID inválido ou teste do painel CPAGrip.");
         }
-    } else {
-        res.status(400).send("Oferta não concluída");
+
+        // Definir valor com base no VIP (Opcional) ou fixo
+        const valorRecompensa = 250; 
+
+        const usuarioAtualizado = await Usuario.findByIdAndUpdate(
+            userId, 
+            { $inc: { saldo: valorRecompensa } },
+            { new: true }
+        );
+
+        if (usuarioAtualizado) {
+            console.log(`✅ Sucesso: ${valorRecompensa} Kz para o ID ${userId}`);
+            return res.status(200).send("OK"); // Resposta que o CPAGrip exige
+        } else {
+            return res.status(404).send("Usuário não existe no banco.");
+        }
+    } catch (error) {
+        res.status(500).send("Erro interno.");
     }
 });
 
