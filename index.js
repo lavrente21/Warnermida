@@ -164,7 +164,6 @@ app.get('/api/admin/saques-pendentes', async (req, res) => {
         res.status(500).json({ error: "Erro ao buscar saques" });
     }
 });
-
 // --- ROTA DE COMPRA DE VIP ---
 app.post('/api/comprar-vip', async (req, res) => {
     const { usuario_id, nivel_vip, valor_pago } = req.body;
@@ -173,41 +172,7 @@ app.post('/api/comprar-vip', async (req, res) => {
         await pool.query('BEGIN');
 
         // 1. Busca o saldo atual do usuário
-        const userRes // Rota para receber o aviso do CPAGrip (Versão Corrigida para PostgreSQL)
-app.get('/api/postback-cpagrip', async (req, res) => {
-    try {
-        const userId = req.query.user_id;
-        
-        // 1. Validação do ID
-        if (!userId || userId === "{tracking_id}") {
-            console.log("⚠️ Postback recebido sem ID de usuário válido.");
-            return res.status(400).send("ID inválido.");
-        }
-
-        // 2. Definir valor da recompensa
-        // Dica: Você pode buscar o 'ganho_por_tarefa' da tabela 'planos_vip' se quiser ser dinâmico
-        const valorRecompensa = 250; 
-
-        // 3. Executar o Update no PostgreSQL
-        const queryText = 'UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2 RETURNING nome, saldo';
-        const result = await pool.query(queryText, [valorRecompensa, userId]);
-
-        if (result.rows.length > 0) {
-            const user = result.rows[0];
-            console.log(`✅ Sucesso: ${valorRecompensa} Kz adicionados ao usuário ${user.nome}. Novo saldo: ${user.saldo}`);
-            
-            // O CPAGrip exige que o servidor responda "OK" ou status 200
-            return res.status(200).send("OK");
-        } else {
-            console.log(`❌ Usuário com ID ${userId} não encontrado no banco.`);
-            return res.status(404).send("Usuário não encontrado.");
-        }
-
-    } catch (error) {
-        console.error("❌ Erro no Postback CPAGrip:", error);
-        res.status(500).send("Erro interno.");
-    }
-});= await pool.query('SELECT saldo FROM usuarios WHERE id = $1', [usuario_id]);
+        const userRes = await pool.query('SELECT saldo FROM usuarios WHERE id = $1', [usuario_id]);
         const user = userRes.rows[0];
 
         if (!user) {
@@ -222,22 +187,46 @@ app.get('/api/postback-cpagrip', async (req, res) => {
         }
 
         // 3. Deduz o saldo e atualiza o nível VIP
-        // Nota: Certifique-se que sua coluna no banco se chama 'nivel_vip'
         await pool.query(
             'UPDATE usuarios SET saldo = saldo - $1, nivel_vip = $2 WHERE id = $3',
             [valor_pago, nivel_vip, usuario_id]
         );
 
-        // 4. (Opcional) Registrar a transação no histórico
-        // await pool.query('INSERT INTO historico ...')
-
         await pool.query('COMMIT');
         res.json({ success: true, message: `VIP ${nivel_vip} ativado!` });
 
     } catch (err) {
-        await pool.query('ROLLBACK');
+        if (pool) await pool.query('ROLLBACK');
         console.error("Erro ao comprar VIP:", err);
         res.status(500).json({ error: "Erro interno ao processar compra" });
+    }
+});
+
+// --- ROTA DE POSTBACK CPAGRIP (FORA DE OUTRAS FUNÇÕES) ---
+app.get('/api/postback-cpagrip', async (req, res) => {
+    try {
+        const userId = req.query.user_id;
+        
+        if (!userId || userId === "{tracking_id}") {
+            return res.status(400).send("ID inválido ou teste do painel CPAGrip.");
+        }
+
+        const valorRecompensa = 250; 
+
+        const result = await pool.query(
+            'UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2 RETURNING nome, saldo',
+            [valorRecompensa, userId]
+        );
+
+        if (result.rows.length > 0) {
+            console.log(`✅ Sucesso CPAGrip: ${valorRecompensa} Kz para ID ${userId}`);
+            return res.status(200).send("OK");
+        } else {
+            return res.status(404).send("Usuário não encontrado.");
+        }
+    } catch (error) {
+        console.error("Erro no Postback:", error);
+        res.status(500).send("Erro interno.");
     }
 });
 
