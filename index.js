@@ -105,52 +105,63 @@ app.post('/api/deposito', async (req, res) => {
 
 // --- COLOQUE ESTAS ROTAS LOGO ABAIXO DAS ROTAS DE DEPÓSITO NO SEU SERVER.JS ---
 // --- ROTA PARA BUSCAR TAREFAS DISPONÍVEIS (CORREÇÃO) ---
+// --- ROTA PARA BUSCAR TAREFAS DISPONÍVEIS (PRONTA) ---
 app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
 
+    // 1. Validação de segurança para evitar o erro "invalid input syntax for type integer"
+    if (!usuario_id || usuario_id === "undefined" || isNaN(parseInt(usuario_id))) {
+        return res.status(400).json({ error: "ID de utilizador inválido ou não fornecido." });
+    }
+
     try {
-        // 1. Pega o nível VIP do usuário e o limite de tarefas do plano dele
+        // 2. Busca o nível VIP do usuário e o limite de tarefas configurado para esse nível
         const userRes = await pool.query(`
             SELECT u.nivel_vip, p.qtd_tarefas 
             FROM usuarios u 
             LEFT JOIN planos_vip p ON u.nivel_vip = p.nivel 
             WHERE u.id = $1`, 
-            [usuario_id]
+            [parseInt(usuario_id)]
         );
 
-        if (userRes.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: "Usuário não encontrado." });
+        }
         
         const user = userRes.rows[0];
         const nivelVip = user.nivel_vip || 0;
-        const limiteTarefas = user.qtd_tarefas || 0; // Se não configurou no admin, o limite é 0
+        const limiteTarefas = user.qtd_tarefas || 0; 
 
-        // 2. Conta quantas tarefas o usuário já fez HOJE
+        // 3. Conta quantas tarefas o usuário já realizou HOJE
+        // (Considerando a data atual do servidor)
         const hoje = new Date().toISOString().split('T')[0];
         const historicoRes = await pool.query(
             'SELECT COUNT(*) FROM historico_tarefas WHERE usuario_id = $1 AND data::date = $2',
-            [usuario_id, hoje]
+            [parseInt(usuario_id), hoje]
         );
         const totalFeitosHoje = parseInt(historicoRes.rows[0].count);
 
-        // 3. Verifica se atingiu o limite
+        // 4. Lógica de Bloqueio: Se já atingiu o limite do plano VIP
         if (totalFeitosHoje >= limiteTarefas) {
             return res.json({ 
                 concluido: true, 
-                mensagem: "Você concluiu todas as tarefas do seu nível hoje!" 
+                mensagem: "Você concluiu todas as tarefas do seu nível hoje! Volte amanhã ou suba de VIP." 
             });
         }
 
-        // 4. Busca as tarefas que são para o nível dele ou inferior
+        // 5. Busca as tarefas que o usuário pode fazer (nível dele ou inferior)
+        // Se o usuário for VIP 1, ele vê tarefas de nível 0 e 1.
         const tarefasRes = await pool.query(
             'SELECT * FROM tarefas WHERE nivel_minimo <= $1 ORDER BY id DESC',
             [nivelVip]
         );
 
+        // Retorna a lista de tarefas para o App
         res.json(tarefasRes.rows);
 
     } catch (err) {
-        console.error("Erro ao buscar tarefas:", err);
-        res.status(500).json({ error: "Erro interno no servidor" });
+        console.error("❌ Erro ao buscar tarefas:", err);
+        res.status(500).json({ error: "Erro interno no servidor ao carregar tarefas." });
     }
 });
 // --- ROTA DE REGISTO ---
