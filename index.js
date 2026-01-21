@@ -105,6 +105,30 @@ app.post('/api/deposito', async (req, res) => {
 
 // --- COLOQUE ESTAS ROTAS LOGO ABAIXO DAS ROTAS DE DEPÓSITO NO SEU SERVER.JS ---
 
+// --- ROTA DE REGISTO ---
+app.post('/api/registrar', async (req, res) => {
+    const { nome, email, senha, convidado_por } = req.body;
+    
+    try {
+        // 1. Gera um ID de convite único para o novo usuário
+        const referral_id = 'user' + Math.floor(1000 + Math.random() * 9000);
+
+        // 2. Insere o usuário na base de dados
+        const result = await pool.query(
+            'INSERT INTO usuarios (nome, email, senha, referral_id, convidado_por, saldo, nivel_vip) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [nome, email, senha, referral_id, convidado_por || null, 0, 0]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error("Erro no registo:", err);
+        if (err.code === '23505') { // Código de erro para email duplicado no Postgres
+            return res.status(400).json({ error: "Este email já está registado." });
+        }
+        res.status(500).json({ error: "Erro ao criar conta." });
+    }
+});
+
 // 1. ROTA DE SOLICITAÇÃO DE SAQUE (Lado do Cliente)
 app.post('/api/retirar', async (req, res) => {
     const { usuario_id, valor, iban, nome_titular, senha } = req.body;
