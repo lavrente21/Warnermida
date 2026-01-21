@@ -104,7 +104,55 @@ app.post('/api/deposito', async (req, res) => {
 });
 
 // --- COLOQUE ESTAS ROTAS LOGO ABAIXO DAS ROTAS DE DEPÓSITO NO SEU SERVER.JS ---
+// --- ROTA PARA BUSCAR TAREFAS DISPONÍVEIS (CORREÇÃO) ---
+app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
+    const { usuario_id } = req.params;
 
+    try {
+        // 1. Pega o nível VIP do usuário e o limite de tarefas do plano dele
+        const userRes = await pool.query(`
+            SELECT u.nivel_vip, p.qtd_tarefas 
+            FROM usuarios u 
+            LEFT JOIN planos_vip p ON u.nivel_vip = p.nivel 
+            WHERE u.id = $1`, 
+            [usuario_id]
+        );
+
+        if (userRes.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
+        
+        const user = userRes.rows[0];
+        const nivelVip = user.nivel_vip || 0;
+        const limiteTarefas = user.qtd_tarefas || 0; // Se não configurou no admin, o limite é 0
+
+        // 2. Conta quantas tarefas o usuário já fez HOJE
+        const hoje = new Date().toISOString().split('T')[0];
+        const historicoRes = await pool.query(
+            'SELECT COUNT(*) FROM historico_tarefas WHERE usuario_id = $1 AND data::date = $2',
+            [usuario_id, hoje]
+        );
+        const totalFeitosHoje = parseInt(historicoRes.rows[0].count);
+
+        // 3. Verifica se atingiu o limite
+        if (totalFeitosHoje >= limiteTarefas) {
+            return res.json({ 
+                concluido: true, 
+                mensagem: "Você concluiu todas as tarefas do seu nível hoje!" 
+            });
+        }
+
+        // 4. Busca as tarefas que são para o nível dele ou inferior
+        const tarefasRes = await pool.query(
+            'SELECT * FROM tarefas WHERE nivel_minimo <= $1 ORDER BY id DESC',
+            [nivelVip]
+        );
+
+        res.json(tarefasRes.rows);
+
+    } catch (err) {
+        console.error("Erro ao buscar tarefas:", err);
+        res.status(500).json({ error: "Erro interno no servidor" });
+    }
+});
 // --- ROTA DE REGISTO ---
 app.post('/api/registrar', async (req, res) => {
     const { nome, email, senha, convidado_por } = req.body;
