@@ -286,56 +286,46 @@ app.post('/api/comprar-vip', async (req, res) => {
     }
 });
 
-// --- ROTA DE POSTBACK CPAGRIP (FORA DE OUTRAS FUNÇÕES) ---
-app.get('/api/postback-cpagrip', async (req, res) => {
+
+// --- ROTA DE TAREFAS CORRIGIDA ---
+app.post('/api/completar-tarefa', async (req, res) => {
+    const { usuario_id, tarefa_id } = req.body;
+
+    // Validação básica
+    if (!usuario_id || !tarefa_id) {
+        return res.status(400).json({ error: "Dados incompletos (usuario_id ou tarefa_id ausentes)." });
+    }
+
     try {
-        const userId = req.query.user_id;
-        
-        if (!userId || userId === "{tracking_id}") {
-            return res.status(400).send("ID inválido ou teste do painel CPAGrip.");
+        await pool.query('BEGIN');
+
+        // 1. Busca o valor da recompensa da tarefa
+        const tarefaRes = await pool.query('SELECT recompensa FROM tarefas WHERE id = $1', [tarefa_id]);
+        if (tarefaRes.rows.length === 0) {
+            await pool.query('ROLLBACK');
+            return res.status(404).json({ error: "Tarefa não encontrada." });
         }
+        const valor = tarefaRes.rows[0].recompensa;
 
-        const valorRecompensa = 250; 
-
-        const result = await pool.query(
-            'UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2 RETURNING nome, saldo',
-            [valorRecompensa, userId]
+        // 2. Registra no histórico (para contar no limite diário)
+        // Certifique-se que a tabela se chama 'historico_tarefas' conforme a sua rota GET
+        await pool.query(
+            'INSERT INTO historico_tarefas (usuario_id, tarefa_id, data) VALUES ($1, $2, CURRENT_TIMESTAMP)',
+            [usuario_id, tarefa_id]
         );
 
-        if (result.rows.length > 0) {
-            console.log(`✅ Sucesso CPAGrip: ${valorRecompensa} Kz para ID ${userId}`);
-            return res.status(200).send("OK");
-        } else {
-            return res.status(404).send("Usuário não encontrado.");
-        }
-    } catch (error) {
-        console.error("Erro no Postback:", error);
-        res.status(500).send("Erro interno.");
-    }
-});
+        // 3. Atualiza o saldo do usuário
+        await pool.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [valor, usuario_id]);
 
-// 3. ROTA PARA PROCESSAR SAQUE (Pagar ou Recusar)
-app.post('/api/admin/processar-saque', async (req, res) => {
-    const { saque_id, status } = req.body;
-    try {
-        if (status === 'rejeitado') {
-            // Se rejeitar, devolve o dinheiro ao saldo do usuário
-            const saqueRes = await pool.query('SELECT usuario_id, valor FROM saques WHERE id = $1', [saque_id]);
-            const saque = saqueRes.rows[0];
-            await pool.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [saque.valor, saque.usuario_id]);
-        }
-        await pool.query('UPDATE saques SET status = $1 WHERE id = $2', [status, saque_id]);
-        res.json({ success: true });
+        await pool.query('COMMIT');
+        res.json({ success: true, message: `Tarefa recompensada com ${valor} Kz!` });
+
     } catch (err) {
-        res.status(500).json({ error: "Erro ao atualizar saque" });
+        if (pool) await pool.query('ROLLBACK');
+        console.error("Erro ao completar tarefa:", err);
+        res.status(500).json({ error: "Erro interno ao processar tarefa." });
     }
 });
-
-// --- ATUALIZAÇÃO DO SUPORTE (Para ler imagens corretamente) ---
-
-// No seu app.get('/api/suporte/historico/:usuario_id'), o código já está bom. 
-// O segredo está no FRONT-END (HTML) que enviará a tag <img> dentro do texto.
-
 // --- ROTA DE TAREFAS ---
 
 app.post('/api/completar-tarefa', async (req, res) => {
