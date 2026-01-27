@@ -165,6 +165,17 @@ app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
         res.status(500).json({ error: "Erro interno no servidor ao carregar tarefas." });
     }
 });
+// Adicione isto antes de app.listen
+app.post('/api/postback-cpagrip', async (req, res) => {
+    const { user_id, valor } = req.body;
+    try {
+        await pool.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [valor, user_id]);
+        res.json({ success: true, message: "Saldo atualizado via CPA!" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Erro ao processar recompensa no banco." });
+    }
+});
 // --- ROTA DE REGISTO ---
 app.post('/api/registrar', async (req, res) => {
     const { nome, email, senha, convidado_por } = req.body;
