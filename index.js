@@ -110,61 +110,49 @@ app.post('/api/deposito', async (req, res) => {
 app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
 
-    // 1. Validação de segurança para evitar o erro "invalid input syntax for type integer"
-    if (!usuario_id || usuario_id === "undefined" || isNaN(parseInt(usuario_id))) {
-        return res.status(400).json({ error: "ID de utilizador inválido ou não fornecido." });
-    }
-
     try {
-        // 2. Busca o nível VIP do usuário e o limite de tarefas configurado para esse nível
-        const userRes = await pool.query(`
-            SELECT u.nivel_vip, p.qtd_tarefas 
+        // 1. Pega o limite de tarefas do VIP do usuário
+        const userQuery = await pool.query(`
+            SELECT u.vip_nivel, v.qtd_tarefas 
             FROM usuarios u 
-            LEFT JOIN planos_vip p ON u.nivel_vip = p.nivel 
-            WHERE u.id = $1`, 
-            [parseInt(usuario_id)]
-        );
+            LEFT JOIN planos_vip v ON u.vip_nivel = v.nivel 
+            WHERE u.id = $1`, [usuario_id]);
 
-        if (userRes.rows.length === 0) {
-            return res.status(404).json({ error: "Usuário não encontrado." });
-        }
-        
-        const user = userRes.rows[0];
-        const nivelVip = user.nivel_vip || 0;
-        const limiteTarefas = user.qtd_tarefas || 0; 
+        if (userQuery.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
 
-        // 3. Conta quantas tarefas o usuário já realizou HOJE
-        // (Considerando a data atual do servidor)
-        const hoje = new Date().toISOString().split('T')[0];
-        const historicoRes = await pool.query(
-            'SELECT COUNT(*) FROM historico_tarefas WHERE usuario_id = $1 AND data::date = $2',
-            [parseInt(usuario_id), hoje]
-        );
-        const totalFeitosHoje = parseInt(historicoRes.rows[0].count);
+        const { qtd_tarefas } = userQuery.rows[0];
+        const limiteDiario = qtd_tarefas || 0; // Se não tiver VIP, o limite é 0
 
-        // 4. Lógica de Bloqueio: Se já atingiu o limite do plano VIP
-        if (totalFeitosHoje >= limiteTarefas) {
-            return res.json({ 
-                concluido: true, 
-                mensagem: "Você concluiu todas as tarefas do seu nível hoje! Volte amanhã ou suba de VIP." 
-            });
+        // 2. Conta quantas tarefas o usuário já fez HOJE
+        const hojeQuery = await pool.query(`
+            SELECT COUNT(*) as total_hoje 
+            FROM historico_tarefas 
+            WHERE usuario_id = $1 AND data_conclusao = CURRENT_DATE`, [usuario_id]);
+
+        const totalFeitoHoje = parseInt(hojeQuery.rows[0].total_hoje);
+
+        // 3. Se já atingiu o limite, envia lista vazia ou mensagem
+        if (totalFeitoHoje >= limiteDiario) {
+            return res.json([]); // Retorna lista vazia: tarefas somem do app
         }
 
-        // 5. Busca as tarefas que o usuário pode fazer (nível dele ou inferior)
-        // Se o usuário for VIP 1, ele vê tarefas de nível 0 e 1.
-        const tarefasRes = await pool.query(
-            'SELECT * FROM tarefas WHERE nivel_minimo <= $1 ORDER BY id DESC',
-            [nivelVip]
-        );
+        // 4. Se ainda tem saldo de tarefas, mostra as que ele ainda não fez hoje
+        const tarefas = await pool.query(`
+            SELECT * FROM tarefas 
+            WHERE id NOT IN (
+                SELECT tarefa_id FROM historico_tarefas 
+                WHERE usuario_id = $1 AND data_conclusao = CURRENT_DATE
+            )
+            LIMIT $2`, [usuario_id, (limiteDiario - totalFeitoHoje)]);
 
-        // Retorna a lista de tarefas para o App
-        res.json(tarefasRes.rows);
+        res.json(tarefas.rows);
 
     } catch (err) {
-        console.error("❌ Erro ao buscar tarefas:", err);
-        res.status(500).json({ error: "Erro interno no servidor ao carregar tarefas." });
+        console.error(err);
+        res.status(500).json({ error: "Erro ao filtrar tarefas por VIP" });
     }
 });
+
 // Adicione isto antes de app.listen
 app.post('/api/postback-cpagrip', async (req, res) => {
     const { user_id, valor } = req.body;
