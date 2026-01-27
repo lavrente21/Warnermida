@@ -291,15 +291,14 @@ app.post('/api/comprar-vip', async (req, res) => {
 app.post('/api/completar-tarefa', async (req, res) => {
     const { usuario_id, tarefa_id } = req.body;
 
-    // Validação básica
     if (!usuario_id || !tarefa_id) {
-        return res.status(400).json({ error: "Dados incompletos (usuario_id ou tarefa_id ausentes)." });
+        return res.status(400).json({ error: "Dados incompletos." });
     }
 
     try {
         await pool.query('BEGIN');
 
-        // 1. Busca o valor da recompensa da tarefa
+        // 1. Busca a recompensa
         const tarefaRes = await pool.query('SELECT recompensa FROM tarefas WHERE id = $1', [tarefa_id]);
         if (tarefaRes.rows.length === 0) {
             await pool.query('ROLLBACK');
@@ -307,14 +306,13 @@ app.post('/api/completar-tarefa', async (req, res) => {
         }
         const valor = tarefaRes.rows[0].recompensa;
 
-        // 2. Registra no histórico (para contar no limite diário)
-        // Certifique-se que a tabela se chama 'historico_tarefas' conforme a sua rota GET
+        // 2. Registro no histórico - Use NOW() para garantir compatibilidade de Timestamp
         await pool.query(
-            'INSERT INTO historico_tarefas (usuario_id, tarefa_id, data) VALUES ($1, $2, CURRENT_TIMESTAMP)',
+            'INSERT INTO historico_tarefas (usuario_id, tarefa_id, data) VALUES ($1, $2, NOW())',
             [usuario_id, tarefa_id]
         );
 
-        // 3. Atualiza o saldo do usuário
+        // 3. Atualiza o saldo
         await pool.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [valor, usuario_id]);
 
         await pool.query('COMMIT');
@@ -322,8 +320,8 @@ app.post('/api/completar-tarefa', async (req, res) => {
 
     } catch (err) {
         if (pool) await pool.query('ROLLBACK');
-        console.error("Erro ao completar tarefa:", err);
-        res.status(500).json({ error: "Erro interno ao processar tarefa." });
+        console.error("Erro detalhado:", err.message); // Isso aparecerá no log do Render/Heroku
+        res.status(500).json({ error: "Erro interno: verifique se a tabela 'historico_tarefas' existe." });
     }
 });
 // --- ROTA DE TAREFAS ---
