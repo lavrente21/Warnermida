@@ -109,47 +109,48 @@ app.post('/api/deposito', async (req, res) => {
 // --- ROTA PARA BUSCAR TAREFAS DISPONÍVEIS (PRONTA) ---
 app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
-
     try {
-        // 1. Pega o limite de tarefas do VIP do usuário
-        const userQuery = await pool.query(`
-            SELECT u.vip_nivel, v.qtd_tarefas 
-            FROM usuarios u 
-            LEFT JOIN planos_vip v ON u.vip_nivel = v.nivel 
-            WHERE u.id = $1`, [usuario_id]);
+        // 1. Pegar o nível VIP do usuário e o limite de tarefas do plano
+        const userRes = await pool.query(
+            `SELECT u.nivel_vip, v.qtd_tarefas 
+             FROM usuarios u 
+             LEFT JOIN planos_vip v ON u.nivel_vip = v.nivel 
+             WHERE u.id = $1`, [usuario_id]
+        );
 
-        if (userQuery.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
+        if (userRes.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
 
-        const { qtd_tarefas } = userQuery.rows[0];
-        const limiteDiario = qtd_tarefas || 0; // Se não tiver VIP, o limite é 0
+        const { nivel_vip, qtd_tarefas } = userRes.rows[0];
+        const limiteDiario = qtd_tarefas || 0;
 
-        // 2. Conta quantas tarefas o usuário já fez HOJE
-        const hojeQuery = await pool.query(`
-            SELECT COUNT(*) as total_hoje 
-            FROM historico_tarefas 
-            WHERE usuario_id = $1 AND data_conclusao = CURRENT_DATE`, [usuario_id]);
+        // 2. Contar quantas tarefas o usuário JÁ FEZ hoje
+        const countRes = await pool.query(
+            `SELECT COUNT(*) FROM historico_tarefas 
+             WHERE usuario_id = $1 AND data::date = CURRENT_DATE`, [usuario_id]
+        );
+        const tarefasFeitasHoje = parseInt(countRes.rows[0].count);
 
-        const totalFeitoHoje = parseInt(hojeQuery.rows[0].total_hoje);
-
-        // 3. Se já atingiu o limite, envia lista vazia ou mensagem
-        if (totalFeitoHoje >= limiteDiario) {
-            return res.json([]); // Retorna lista vazia: tarefas somem do app
+        // 3. Se já atingiu o limite, retorna lista vazia
+        if (tarefasFeitasHoje >= limiteDiario) {
+            return res.json([]); 
         }
 
-        // 4. Se ainda tem saldo de tarefas, mostra as que ele ainda não fez hoje
-        const tarefas = await pool.query(`
-            SELECT * FROM tarefas 
-            WHERE id NOT IN (
-                SELECT tarefa_id FROM historico_tarefas 
-                WHERE usuario_id = $1 AND data_conclusao = CURRENT_DATE
-            )
-            LIMIT $2`, [usuario_id, (limiteDiario - totalFeitoHoje)]);
+        // 4. Buscar tarefas que o usuário ainda NÃO FEZ hoje e que são do nível dele (ou inferior)
+        // Mudamos o filtro para mostrar tarefas condizentes com o VIP
+        const tarefasRes = await pool.query(
+            `SELECT * FROM tarefas 
+             WHERE nivel_minimo <= $1 
+             AND id NOT IN (
+                 SELECT tarefa_id FROM historico_tarefas 
+                 WHERE usuario_id = $2 AND data::date = CURRENT_DATE
+             )
+             LIMIT $3`, [nivel_vip, usuario_id, (limiteDiario - tarefasFeitasHoje)]
+        );
 
-        res.json(tarefas.rows);
-
+        res.json(tarefasRes.rows);
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Erro ao filtrar tarefas por VIP" });
+        console.error("Erro ao buscar tarefas:", err);
+        res.status(500).json({ error: "Erro ao carregar tarefas" });
     }
 });
 
