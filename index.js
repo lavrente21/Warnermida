@@ -250,39 +250,33 @@ app.get('/api/admin/saques-pendentes', async (req, res) => {
 });
 // --- ROTA DE COMPRA DE VIP ---
 app.post('/api/comprar-vip', async (req, res) => {
-    const { usuario_id, nivel_vip, valor_pago } = req.body;
-
+    const { usuario_id, nivel_vip } = req.body;
     try {
+        // 1. Verificar se o usuário já possui esse VIP ativo
+        const userCheck = await pool.query('SELECT nivel_vip, saldo FROM usuarios WHERE id = $1', [usuario_id]);
+        if (userCheck.rows[0].nivel_vip === nivel_vip) {
+            return res.status(400).json({ error: "Você já possui este plano VIP ativo!" });
+        }
+
+        const saldoAtual = userCheck.rows[0].saldo;
+
+        // 2. Buscar o preço do novo VIP
+        const vipRes = await pool.query('SELECT preco FROM planos_vip WHERE nivel = $1', [nivel_vip]);
+        const preco = vipRes.rows[0].preco;
+
+        if (saldoAtual < preco) {
+            return res.status(400).json({ error: "Saldo insuficiente para adquirir este VIP." });
+        }
+
+        // 3. Processar a compra
         await pool.query('BEGIN');
-
-        // 1. Busca o saldo atual do usuário
-        const userRes = await pool.query('SELECT saldo FROM usuarios WHERE id = $1', [usuario_id]);
-        const user = userRes.rows[0];
-
-        if (!user) {
-            await pool.query('ROLLBACK');
-            return res.status(404).json({ error: "Usuário não encontrado" });
-        }
-
-        // 2. Verifica se tem saldo suficiente
-        if (parseFloat(user.saldo) < parseFloat(valor_pago)) {
-            await pool.query('ROLLBACK');
-            return res.status(400).json({ error: "Saldo insuficiente" });
-        }
-
-        // 3. Deduz o saldo e atualiza o nível VIP
-        await pool.query(
-            'UPDATE usuarios SET saldo = saldo - $1, nivel_vip = $2 WHERE id = $3',
-            [valor_pago, nivel_vip, usuario_id]
-        );
-
+        await pool.query('UPDATE usuarios SET saldo = saldo - $1, nivel_vip = $2 WHERE id = $3', [preco, nivel_vip, usuario_id]);
         await pool.query('COMMIT');
-        res.json({ success: true, message: `VIP ${nivel_vip} ativado!` });
 
+        res.json({ success: true, message: "VIP adquirido com sucesso!" });
     } catch (err) {
         if (pool) await pool.query('ROLLBACK');
-        console.error("Erro ao comprar VIP:", err);
-        res.status(500).json({ error: "Erro interno ao processar compra" });
+        res.status(500).json({ error: "Erro ao processar compra." });
     }
 });
 
