@@ -110,7 +110,7 @@ app.post('/api/deposito', async (req, res) => {
 app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
     try {
-        // 1. Pegar o nível VIP do usuário e o limite de tarefas do plano
+        // CORREÇÃO: Usando 'nivel_vip' em vez de 'vip_nivel'
         const userRes = await pool.query(
             `SELECT u.nivel_vip, v.qtd_tarefas 
              FROM usuarios u 
@@ -118,25 +118,25 @@ app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
              WHERE u.id = $1`, [usuario_id]
         );
 
-        if (userRes.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: "Usuário não encontrado" });
+        }
 
         const { nivel_vip, qtd_tarefas } = userRes.rows[0];
         const limiteDiario = qtd_tarefas || 0;
 
-        // 2. Contar quantas tarefas o usuário JÁ FEZ hoje
+        // Contar tarefas feitas hoje
         const countRes = await pool.query(
             `SELECT COUNT(*) FROM historico_tarefas 
              WHERE usuario_id = $1 AND data::date = CURRENT_DATE`, [usuario_id]
         );
         const tarefasFeitasHoje = parseInt(countRes.rows[0].count);
 
-        // 3. Se já atingiu o limite, retorna lista vazia
         if (tarefasFeitasHoje >= limiteDiario) {
-            return res.json([]); 
+            return res.json([]); // Retorna lista vazia se atingiu o limite
         }
 
-        // 4. Buscar tarefas que o usuário ainda NÃO FEZ hoje e que são do nível dele (ou inferior)
-        // Mudamos o filtro para mostrar tarefas condizentes com o VIP
+        // Buscar tarefas disponíveis para o nível do usuário
         const tarefasRes = await pool.query(
             `SELECT * FROM tarefas 
              WHERE nivel_minimo <= $1 
@@ -149,11 +149,10 @@ app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
 
         res.json(tarefasRes.rows);
     } catch (err) {
-        console.error("Erro ao buscar tarefas:", err);
-        res.status(500).json({ error: "Erro ao carregar tarefas" });
+        console.error("Erro detalhado:", err);
+        res.status(500).json({ error: "Erro interno no servidor" });
     }
 });
-
 // Adicione isto antes de app.listen
 app.post('/api/postback-cpagrip', async (req, res) => {
     const { user_id, valor } = req.body;
