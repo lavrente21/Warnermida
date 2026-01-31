@@ -106,7 +106,6 @@ app.post('/api/deposito', async (req, res) => {
 // --- COLOQUE ESTAS ROTAS LOGO ABAIXO DAS ROTAS DE DEPÓSITO NO SEU SERVER.JS ---
 // --- ROTA PARA BUSCAR TAREFAS DISPONÍVEIS (CORREÇÃO) ---
 // --- ROTA PARA BUSCAR TAREFAS DISPONÍVEIS (PRONTA) ---
-// --- ROTA PARA BUSCAR TAREFAS DISPONÍVEIS (PRONTA) ---
 app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
     try {
@@ -153,6 +152,7 @@ app.get('/api/tarefas-disponiveis/:usuario_id', async (req, res) => {
         res.status(500).json({ error: "Erro interno no servidor" });
     }
 });
+
 // Adicione isto antes de app.listen
 app.post('/api/postback-cpagrip', async (req, res) => {
     const { user_id, valor } = req.body;
