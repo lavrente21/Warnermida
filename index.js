@@ -236,9 +236,8 @@ app.post('/api/admin/config-vip', async (req, res) => {
 app.get('/api/historico/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
     try {
-        // Esta query busca os dados da tarefa que foi concluída
         const result = await pool.query(`
-            SELECT h.data, t.recompensa as valor, t.nome as titulo
+            SELECT h.data, t.recompensa as valor, t.titulo
             FROM historico_tarefas h
             JOIN tarefas t ON h.tarefa_id = t.id
             WHERE h.usuario_id = $1
@@ -247,8 +246,8 @@ app.get('/api/historico/:usuario_id', async (req, res) => {
         
         res.json(result.rows);
     } catch (err) {
-        console.error("Erro no SQL:", err);
-        res.status(500).json({ error: "Erro ao buscar histórico" });
+        console.error("Erro ao buscar histórico:", err);
+        res.status(500).json({ error: "Erro interno no servidor" });
     }
 });
 
