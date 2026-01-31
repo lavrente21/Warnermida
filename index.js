@@ -36,34 +36,33 @@ app.get('/api/status', (req, res) => {
 
 // --- ALTERE DE: app.post('/api/retirar' ---
 // --- PARA: ---
+// ROTA DE LEVANTAMENTO NO SERVIDOR
 app.post('/api/levantamento', async (req, res) => {
     const { usuario_id, valor, iban, nome_titular, senha } = req.body;
+
     try {
-        // Verifica saldo e senha
-        const userRes = await pool.query('SELECT saldo, senha FROM usuarios WHERE id = $1', [usuario_id]);
-        const user = userRes.rows[0];
-
-        if (!user || user.senha !== senha) return res.status(401).json({ error: "Senha incorreta" });
-        if (parseFloat(user.saldo) < parseFloat(valor)) return res.status(400).json({ error: "Saldo insuficiente" });
-
-        await pool.query('BEGIN');
-        // Deduz saldo
-        await pool.query('UPDATE usuarios SET saldo = saldo - $1 WHERE id = $2', [valor, usuario_id]);
+        // 1. Verificar se a senha de levantamento está correta (opcional, dependendo da sua lógica)
+        const userCheck = await pool.query('SELECT saldo, senha FROM usuarios WHERE id = $1', [usuario_id]);
         
-        // Registra saque (Certifique-se que a tabela se chama 'saques' ou 'levantamentos')
+        if (userCheck.rows.length === 0) return res.status(404).json({ error: "Usuário não encontrado" });
+        if (userCheck.rows[0].saldo < valor) return res.status(400).json({ error: "Saldo insuficiente" });
+
+        // 2. Registar o levantamento com status 'pendente'
         await pool.query(
-            'INSERT INTO saques (usuario_id, valor, iban, nome_titular, status) VALUES ($1, $2, $3, $4, $5)',
-            [usuario_id, valor, iban, nome_titular, 'pendente']
+            `INSERT INTO levantamentos (usuario_id, valor, iban, nome_titular, status, data) 
+             VALUES ($1, $2, $3, $4, 'pendente', CURRENT_TIMESTAMP)`,
+            [usuario_id, valor, iban, nome_titular]
         );
-        await pool.query('COMMIT');
-        res.json({ success: true, message: "Levantamento solicitado!" });
+
+        // 3. Descontar do saldo do usuário
+        await pool.query('UPDATE usuarios SET saldo = saldo - $1 WHERE id = $2', [valor, usuario_id]);
+
+        res.json({ success: true, message: "Pedido de saque enviado!" });
     } catch (err) {
-        if (pool) await pool.query('ROLLBACK');
-        console.error(err);
-        res.status(500).json({ error: "Erro ao processar saque" });
+        console.error("Erro no levantamento:", err);
+        res.status(500).json({ error: "Erro interno ao processar o saque" });
     }
 });
-
 app.post('/api/login', async (req, res) => {
   const { email, senha } = req.body;
   try {
