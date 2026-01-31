@@ -326,12 +326,48 @@ app.post('/api/completar-tarefa', async (req, res) => {
 // --- ROTA DE TAREFAS ---
 
 app.post('/api/completar-tarefa', async (req, res) => {
-    const { usuario_id, valor } = req.body;
+    const { usuario_id, tarefa_id } = req.body;
+
     try {
+        await pool.query('BEGIN');
+
+        // 1. Verifica se o usuário já atingiu o limite diário antes de processar
+        const userVip = await pool.query(
+            `SELECT u.nivel_vip, v.qtd_tarefas 
+             FROM usuarios u 
+             LEFT JOIN planos_vip v ON u.nivel_vip = v.nivel 
+             WHERE u.id = $1`, [usuario_id]);
+        
+        const limiteDiario = userVip.rows[0]?.qtd_tarefas || 0;
+
+        const contagemHoje = await pool.query(
+            `SELECT COUNT(*) FROM historico_tarefas 
+             WHERE usuario_id = $1 AND data::date = CURRENT_DATE`, [usuario_id]);
+
+        if (parseInt(contagemHoje.rows[0].count) >= limiteDiario) {
+            await pool.query('ROLLBACK');
+            return res.status(400).json({ error: "Limite diário de tarefas atingido!" });
+        }
+
+        // 2. Busca a recompensa da tarefa
+        const tarefaRes = await pool.query('SELECT recompensa FROM tarefas WHERE id = $1', [tarefa_id]);
+        const valor = tarefaRes.rows[0].recompensa;
+
+        // 3. Registra com a data de hoje (Timestamp)
+        await pool.query(
+            'INSERT INTO historico_tarefas (usuario_id, tarefa_id, data) VALUES ($1, $2, NOW())',
+            [usuario_id, tarefa_id]
+        );
+
+        // 4. Atualiza o saldo
         await pool.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [valor, usuario_id]);
-        res.json({ message: "Tarefa recompensada!" });
+
+        await pool.query('COMMIT');
+        res.json({ success: true, message: "Tarefa concluída!" });
+
     } catch (err) {
-        res.status(500).json({ error: "Erro ao processar recompensa." });
+        if (pool) await pool.query('ROLLBACK');
+        res.status(500).json({ error: "Erro ao processar tarefa." });
     }
 });
 
