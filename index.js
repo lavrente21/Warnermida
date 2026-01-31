@@ -232,6 +232,7 @@ app.post('/api/admin/config-vip', async (req, res) => {
     }
 });
 // Adicione esta rota no seu servidor para buscar o histórico de tarefas
+// ROTA PARA BUSCAR HISTÓRICO DE TAREFAS CONCLUÍDAS
 app.get('/api/historico/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
     try {
@@ -246,7 +247,7 @@ app.get('/api/historico/:usuario_id', async (req, res) => {
         res.json(result.rows);
     } catch (err) {
         console.error("Erro ao buscar histórico:", err);
-        res.status(500).json({ error: "Erro ao carregar histórico" });
+        res.status(500).json({ error: "Erro ao carregar histórico no banco de dados." });
     }
 });
 
