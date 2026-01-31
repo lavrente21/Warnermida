@@ -231,6 +231,24 @@ app.post('/api/admin/config-vip', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+// Adicione esta rota no seu servidor para buscar o histórico de tarefas
+app.get('/api/historico/:usuario_id', async (req, res) => {
+    const { usuario_id } = req.params;
+    try {
+        const result = await pool.query(`
+            SELECT h.data, t.recompensa, t.nome as titulo
+            FROM historico_tarefas h
+            JOIN tarefas t ON h.tarefa_id = t.id
+            WHERE h.usuario_id = $1
+            ORDER BY h.data DESC
+        `, [usuario_id]);
+        
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Erro ao buscar histórico:", err);
+        res.status(500).json({ error: "Erro ao carregar histórico" });
+    }
+});
 
 
 // 2. ROTA QUE ESTAVA DANDO 404 (Lado do Admin)
