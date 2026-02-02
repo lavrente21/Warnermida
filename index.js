@@ -85,7 +85,25 @@ app.get('/api/usuario/:id', async (req, res) => {
     res.status(500).json({ error: "Erro ao buscar dados" });
   }
 });
-
+// ROTA PARA BUSCAR HISTÓRICO FINANCEIRO (DEPÓSITOS E SAQUES)
+app.get('/api/transacoes/:usuario_id', async (req, res) => {
+    const { usuario_id } = req.params;
+    try {
+        const query = `
+            SELECT 'deposito' as tipo, valor, status, data::text, NULL as iban 
+            FROM depositos WHERE usuario_id = $1
+            UNION ALL
+            SELECT 'saque' as tipo, valor, status, data::text, iban 
+            FROM saques WHERE usuario_id = $1
+            ORDER BY data DESC
+        `;
+        const result = await pool.query(query, [usuario_id]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Erro ao buscar transações:", err);
+        res.status(500).json({ error: "Erro interno ao buscar histórico financeiro" });
+    }
+});
 // --- ROTA DE DEPÓSITO (CLIENTE ENVIANDO COMPROVATIVO) ---
 
 app.post('/api/deposito', async (req, res) => {
