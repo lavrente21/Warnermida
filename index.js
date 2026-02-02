@@ -268,6 +268,7 @@ app.get('/api/historico/:usuario_id', async (req, res) => {
     }
 });
 // ROTA UNIFICADA DE HISTÓRICO FINANCEIRO
+// ROTA PARA O HISTÓRICO FINANCEIRO (DEPÓSITOS E LEVANTAMENTOS)
 app.get('/api/transacoes/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
     try {
@@ -282,8 +283,8 @@ app.get('/api/transacoes/:usuario_id', async (req, res) => {
         const result = await pool.query(query, [usuario_id]);
         res.json(result.rows);
     } catch (err) {
-        console.error("Erro ao buscar transações:", err);
-        res.status(500).json({ error: "Erro interno ao buscar histórico" });
+        console.error("Erro na query de histórico:", err);
+        res.status(500).json({ error: "Erro ao buscar transações" });
     }
 });
 
