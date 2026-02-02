@@ -86,24 +86,7 @@ app.get('/api/usuario/:id', async (req, res) => {
   }
 });
 // ROTA PARA BUSCAR HISTÓRICO FINANCEIRO (DEPÓSITOS E SAQUES)
-app.get('/api/transacoes/:usuario_id', async (req, res) => {
-    const { usuario_id } = req.params;
-    try {
-        const query = `
-            SELECT 'deposito' as tipo, valor, status, data::text, NULL as iban 
-            FROM depositos WHERE usuario_id = $1
-            UNION ALL
-            SELECT 'saque' as tipo, valor, status, data::text, iban 
-            FROM saques WHERE usuario_id = $1
-            ORDER BY data DESC
-        `;
-        const result = await pool.query(query, [usuario_id]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error("Erro ao buscar transações:", err);
-        res.status(500).json({ error: "Erro interno ao buscar histórico financeiro" });
-    }
-});
+
 // --- ROTA DE DEPÓSITO (CLIENTE ENVIANDO COMPROVATIVO) ---
 
 app.post('/api/deposito', async (req, res) => {
@@ -269,7 +252,9 @@ app.get('/api/historico/:usuario_id', async (req, res) => {
 });
 // ROTA UNIFICADA DE HISTÓRICO FINANCEIRO
 // ROTA PARA O HISTÓRICO FINANCEIRO (DEPÓSITOS E LEVANTAMENTOS)
-app.get('/api/transacoes/:usuario_id', async (req, res) => {
+
+// ROTA CORRIGIDA: Une depósitos e levantamentos num único histórico
+app.get('/api/historico/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
     try {
         const query = `
@@ -283,11 +268,10 @@ app.get('/api/transacoes/:usuario_id', async (req, res) => {
         const result = await pool.query(query, [usuario_id]);
         res.json(result.rows);
     } catch (err) {
-        console.error("Erro na query de histórico:", err);
-        res.status(500).json({ error: "Erro ao buscar transações" });
+        console.error("Erro no Banco:", err);
+        res.status(500).json({ error: "Erro ao buscar histórico" });
     }
 });
-
 // 2. ROTA QUE ESTAVA DANDO 404 (Lado do Admin)
 app.get('/api/admin/saques-pendentes', async (req, res) => {
     try {
