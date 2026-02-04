@@ -254,6 +254,26 @@ app.get('/api/admin/saques-pendentes', async (req, res) => {
     }
 });
 
+// Rota para o Admin aprovar ou rejeitar o saque
+app.post('/api/admin/processar-saque', async (req, res) => {
+    const { saque_id, status } = req.body;
+    try {
+        await pool.query('BEGIN');
+        if (status === 'rejeitado') {
+            const saque = await pool.query('SELECT usuario_id, valor FROM saques WHERE id = $1', [saque_id]);
+            if (saque.rows.length > 0) {
+                await pool.query('UPDATE usuarios SET saldo = saldo + $1 WHERE id = $2', [saque.rows[0].valor, saque.rows[0].usuario_id]);
+            }
+        }
+        await pool.query('UPDATE saques SET status = $1 WHERE id = $2', [status, saque_id]);
+        await pool.query('COMMIT');
+        res.json({ success: true });
+    } catch (err) {
+        await pool.query('ROLLBACK');
+        res.status(500).json({ error: "Erro ao processar" });
+    }
+});
+
   // ROTA 1: APENAS SAQUES E RECARGAS (DEPÓSITOS)
 app.get('/api/historico/:usuario_id', async (req, res) => {
     const { usuario_id } = req.params;
@@ -458,7 +478,7 @@ app.get('/api/admin/depositos-pendentes', async (req, res) => {
     `);
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: "Erro ao buscar dados." });
+    res.status(500).json({ error: "Erro ao buscar depósitos" });
   }
 });
 
@@ -533,6 +553,7 @@ app.post('/api/suporte/enviar', async (req, res) => {
 });
 
 // 2. Admin buscar lista de usuários que mandaram mensagem
+
 app.get('/api/admin/suporte/conversas', async (req, res) => {
     try {
         const result = await pool.query(`
