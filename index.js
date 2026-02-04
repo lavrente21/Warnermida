@@ -235,43 +235,7 @@ app.post('/api/admin/config-vip', async (req, res) => {
 // ROTA PARA BUSCAR HISTÓRICO DE TAREFAS CONCLUÍDAS
 // ROTA UNIFICADA DE HISTÓRICO FINANCEIRO (Substitua as duplicadas por esta)
 app.get('/api/historico/:usuario_id', async (req, res) => {
-    const { usuario_id } = req.params;
-    try {
-        const query = `
-            SELECT 
-                'deposito' as tipo, 
-                valor::float, 
-                status, 
-                data::text, 
-                NULL as titulo 
-            FROM depositos WHERE usuario_id = $1
-            UNION ALL
-            SELECT 
-                'saque' as tipo, 
-                valor::float, 
-                status, 
-                data::text, 
-                NULL as titulo 
-            FROM saques WHERE usuario_id = $1
-            UNION ALL
-            SELECT 
-                'tarefa' as tipo, 
-                t.recompensa::float as valor, 
-                'concluido' as status, 
-                h.data::text, 
-                t.titulo 
-            FROM historico_tarefas h
-            JOIN tarefas t ON h.tarefa_id = t.id
-            WHERE h.usuario_id = $1
-            ORDER BY data DESC
-        `;
-        const result = await pool.query(query, [usuario_id]);
-        res.json(result.rows);
-    } catch (err) {
-        console.error("Erro no Banco de Dados:", err);
-        res.status(500).json({ error: "Erro ao buscar histórico unificado" });
-    }
-});
+
 
 // 2. ROTA QUE ESTAVA DANDO 404 (Lado do Admin)
 app.get('/api/admin/saques-pendentes', async (req, res) => {
@@ -286,6 +250,43 @@ app.get('/api/admin/saques-pendentes', async (req, res) => {
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: "Erro ao buscar saques" });
+    }
+});
+
+  // ROTA 1: APENAS SAQUES E RECARGAS (DEPÓSITOS)
+app.get('/api/historico/:usuario_id', async (req, res) => {
+    const { usuario_id } = req.params;
+    try {
+        const query = `
+            SELECT 'deposito' as tipo, valor::float, status, data::text 
+            FROM depositos WHERE usuario_id = $1
+            UNION ALL
+            SELECT 'saque' as tipo, valor::float, status, data::text 
+            FROM saques WHERE usuario_id = $1
+            ORDER BY data DESC
+        `;
+        const result = await pool.query(query, [usuario_id]);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao buscar histórico financeiro" });
+    }
+});
+
+// ROTA 2: APENAS TAREFAS CONCLUÍDAS
+app.get('/api/historico-tarefas/:usuario_id', async (req, res) => {
+    const { usuario_id } = req.params;
+    try {
+        const query = `
+            SELECT h.data::text, t.titulo, t.recompensa as valor
+            FROM historico_tarefas h
+            JOIN tarefas t ON h.tarefa_id = t.id
+            WHERE h.usuario_id = $1
+            ORDER BY h.data DESC
+        `;
+        const result = await pool.query(query, [usuario_id]);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: "Erro ao buscar tarefas concluídas" });
     }
 });
 // --- ROTA DE COMPRA DE VIP ---
