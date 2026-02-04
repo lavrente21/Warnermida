@@ -234,7 +234,7 @@ app.post('/api/admin/config-vip', async (req, res) => {
 // Adicione esta rota no seu servidor para buscar o histórico de tarefas
 // ROTA PARA BUSCAR HISTÓRICO DE TAREFAS CONCLUÍDAS
 // ROTA UNIFICADA DE HISTÓRICO FINANCEIRO (Substitua as duplicadas por esta)
-app.get('/api/historico/:usuario_id', async (req, res) => {
+
 
 
 // 2. ROTA QUE ESTAVA DANDO 404 (Lado do Admin)
