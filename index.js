@@ -89,18 +89,19 @@ app.get('/api/usuario/:id', async (req, res) => {
 
 // --- ROTA DE DEPÓSITO (CLIENTE ENVIANDO COMPROVATIVO) ---
 
+// Rota para processar o depósito (Recarga)
 app.post('/api/deposito', async (req, res) => {
-  const { usuario_id, valor, comprovativo } = req.body;
-  if (!usuario_id || !valor || !comprovativo) return res.status(400).json({ error: "Dados incompletos." });
-  try {
-    await pool.query(
-      'INSERT INTO depositos (usuario_id, valor, comprovativo, status) VALUES ($1, $2, $3, $4)',
-      [usuario_id, valor, comprovativo, 'pendente']
-    );
-    res.json({ message: "Depósito enviado com sucesso!" });
-  } catch (err) {
-    res.status(500).json({ error: "Erro ao processar depósito." });
-  }
+    const { usuario_id, valor, comprovativo } = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO depositos (usuario_id, valor, comprovativo, status, data) VALUES ($1, $2, $3, $4, NOW())',
+            [usuario_id, valor, comprovativo, 'pendente']
+        );
+        res.json({ success: true, message: "Solicitação de recarga enviada!" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Erro ao processar recarga" });
+    }
 });
 
 // --- COLOQUE ESTAS ROTAS LOGO ABAIXO DAS ROTAS DE DEPÓSITO NO SEU SERVER.JS ---
